@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Ignorar arquivos de dados locais
+data/
+*.csv
+*.sqlite
+*.db
