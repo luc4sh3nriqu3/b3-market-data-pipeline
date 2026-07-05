@@ -28,9 +28,13 @@ Este pipeline resolve esse problema ao automatizar a ingestão e o saneamento do
 | Carga/Conexão  | SQLAlchemy / Psycopg2   |
 | Versionamento  | Git e GitHub            |
 
-## 🏗️ Arquitetura de Medalhão (Medallion)
+## 🏗️ Arquitetura de Medalhão e Fluxo dos Dados
 
-O pipeline segue o padrão de mercado para organização de Data Lakes e Data Warehouses:
+O pipeline segue o padrão de mercado para organização de Data Lakes e Data Warehouses, a **Arquitetura Medalhão**:
+
+<p align=\"center">
+        <img src="assets/pipeline-b3-v1.drawio.png" alt="Arquitetura do Projeto" width="800" height="270>
+</p>
 
 ### 📂 Raw (Bronze)
 Armazena os dados históricos em formato `.csv` exatamente como foram retornados pela API, garantindo a imutabilidade e a possibilidade de reprocessamento em caso de falhas catastróficas.
@@ -45,6 +49,9 @@ Os dados tratados são persistidos em um banco de dados relacional. Utilizando *
 
 ```text
 b3-market-data-pipeline/
+│
+├── assets/             # Imagens e recursos adicionais da documentação
+│   └── pipeline-b3-v1.drawio.png
 │
 ├── data/               # Camada de Armazenamento Local (Ignorada no Git)
 │   └── raw/            # Arquivos CSV brutos extraídos do yfinance
@@ -61,31 +68,6 @@ b3-market-data-pipeline/
 ├── requirements.txt    # Dependências do projeto
 ├── README.md           # Documentação
 └── .gitignore          # Filtro de arquivos para o Git
-```
-
-## 🔄 Fluxo do Pipeline
-```text
-Yahoo Finance API
-               │
-               ▼
-       Extração (Python)
-               │
-               ▼
-        Camada RAW (CSV)
-               │
-               ▼
-     Transformação (Pandas)
-               │
-               ▼
-    Banco de Dados Relacional
-     (Camada Silver/Trusted)
-               │
-               ▼
-     Agregações / Views SQL
-      (Camada Gold/Refined)
-               │
-               ▼
-Tabelas Prontas para Consumo (BI / Analytics)
 ```
 
 ## ⚙️ Como Executar
