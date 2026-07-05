@@ -1,7 +1,7 @@
 # 📈 Pipeline ETL de Dados Financeiros da B3 (Ações & FIIs)
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat-pro)
-![SQL](https://img.shields.io/badge/Banco%20de%20Dados-SQL-blue)
+![SQL](https://img.shields.io/badge/Banco%20de%20Dados-PostgreSQL-blue)
 ![Status](https://img.shields.io/badge/Status-Vers%C3%A3o%201.0-brightgreen)
 ![Educação](https://img.shields.io/badge/Foco-Engenharia%20de%20Dados-orange)
 
@@ -24,7 +24,7 @@ Este pipeline resolve esse problema ao automatizar a ingestão e o saneamento do
 | Fonte de Dados | API Yahoo Finance (`yfinance`) |
 | Linguagem      | Python 3.10+            |
 | Transformação  | Pandas                  |
-| Armazenamento  | Sistema de Arquivos Local (CSV) e Banco Relacional (PostgreSQL/SQLite) |
+| Armazenamento  | Sistema de Arquivos Local (CSV) e Banco Relacional (PostgreSQL) |
 | Carga/Conexão  | SQLAlchemy / Psycopg2   |
 | Versionamento  | Git e GitHub            |
 
@@ -86,6 +86,34 @@ Yahoo Finance API
                │
                ▼
 Tabelas Prontas para Consumo (BI / Analytics)
+```
+
+## ⚙️ Como Executar
+**Pré-requisitos**
+- Python 3.10 ou superior instalado.
+- Banco de dados PostgreSQL configurado (ou utilização do SQLite nativo).
+
+**Passo a Passo**
+1. Clone o repositório:
+```bash
+git clone https://github.com/luc4sh3nriqu3/b3-market-data-pipeline.git
+cd b3-market-data-pipeline
+```
+2. Crie o ambiente virtual:
+```bash
+python -m venv .venv
+# No Windows:
+.\.venv\Scripts\activate
+# No Linux/Mac:
+source .venv/bin/activate
+```
+3. Instale as dependências:
+```bash
+pip install -r requirements.txt
+```
+4. Execute o pipeline:
+```bash
+python main.py
 ```
 
 ## 📌 Funcionalidades da V1.0
