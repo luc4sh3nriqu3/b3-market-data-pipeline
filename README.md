@@ -33,7 +33,7 @@ Este pipeline resolve esse problema ao automatizar a ingestão e o saneamento do
 O pipeline segue o padrão de mercado para organização de Data Lakes e Data Warehouses, a **Arquitetura Medalhão**:
 
 <p align=\"center">
-        <img src="assets/pipeline-b3-v1.drawio.png" alt="Arquitetura do Projeto" width="800" height="270>
+        <img src="assets/pipeline-b3-v1.drawio.png" alt="Arquitetura do Projeto" width="800" height="270">
 </p>
 
 ### 📂 Raw (Bronze)
