@@ -6,3 +6,8 @@ data/*
 *.csv
 *.sqlite
 *.db
+*.xlsx
+*.parquet
+
+# Support files
+*.txt
