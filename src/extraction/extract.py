@@ -46,9 +46,9 @@ def save_raw_data(df, today):
     TIME = str(today.time().replace(microsecond=0)).replace(':', '')
     
     # Definição do diretório base de destino dos dados.
-    # '__file__' pega o caminho do script atual. '.parent.parent' sobe duas pastas.
+    # '__file__' pega o caminho do script atual. '.parent.parent.parent.' sobe três pastas.
     # O objetivo é salvar em uma camada "raw" (dados crus, exatamente como vieram da fonte)
-    DATA_DIR = Path(__file__).parent.parent / 'data' / 'raw'
+    DATA_DIR = Path(__file__).parent.parent.parent / 'data' / 'raw'
 
     # Construção do caminho particionado: data/raw/ANO/MES/DIA
     OUTPUT_DIR = DATA_DIR / YEAR / MONTH / DAY
