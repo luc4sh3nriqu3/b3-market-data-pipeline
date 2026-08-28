@@ -11,3 +11,8 @@ data/*
 
 # Support files
 *.txt
+
+#Cache
+__pycache__/*
+__pycache__
+*.pyc

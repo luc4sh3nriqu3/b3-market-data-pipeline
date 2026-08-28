@@ -24,7 +24,7 @@ Este pipeline resolve esse problema ao automatizar a ingestão e o saneamento do
 | Fonte de Dados | API Yahoo Finance (`yfinance`) |
 | Linguagem      | Python 3.10+            |
 | Transformação  | Pandas                  |
-| Armazenamento  | Sistema de Arquivos Local (CSV) e Banco Relacional (PostgreSQL) |
+| Armazenamento  | Sistema de Arquivos Local (Parquet) e Banco Relacional (PostgreSQL) |
 | Carga/Conexão  | SQLAlchemy / Psycopg2   |
 | Versionamento  | Git e GitHub            |
 
@@ -37,7 +37,12 @@ O pipeline segue o padrão de mercado para organização de Data Lakes e Data Wa
 </p>
 
 ### 📂 Raw (Bronze)
-Armazena os dados históricos em formato `.parquet` exatamente como foram retornados pela API, garantindo a imutabilidade e a possibilidade de reprocessamento em caso de falhas catastróficas.
+Armazena os dados históricos exatamente como foram retornados pela API em formato `.parquet`, garantindo a imutabilidade do Data Lake.
+
+* **Frequência de Execução:** Diferente de dados intraday, o pipeline foi desenhado para processamento diário em lote (**Daily Batch EOD - End of Day**). Ele é executado uma vez ao dia após o fechamento do pregão da B3, otimizando custos de processamento e banda.
+* **Estratégia de Captura (Sliding Window):** Em vez de realizar cargas completas de anos de histórico diariamente (gerando custos desnecessários e risco de bloqueio na API), o pipeline utiliza uma **Janela Deslizante de 30 dias**. Isso garante eficiência e resiliência, permitindo que o pipeline se recupere de falhas temporárias e capture ajustes retroativos de mercado (como dividendos e desdobramentos).
+
+Para entender as decisões técnicas, acesse: [**📂 Detalhes Técnicos de Extração (Raw)**](src/extraction/README.md)
 
 ### 📂 Silver (Trusted)
 Camada onde o Python entra em ação com Pandas para aplicar as regras de saneamento: remoção de linhas nulas, tipagem correta de valores financeiros e padronização dos nomes das colunas para o padrão do banco (*snake_case*).
@@ -51,17 +56,22 @@ Os dados tratados são persistidos em um banco de dados relacional. Utilizando *
 b3-market-data-pipeline/
 │
 ├── assets/                     # Imagens e recursos adicionais da documentação
-│   └── pipeline-b3-v1.drawio.png
+│   ├── pipeline-b3-v1.drawio.png
+│   └── aprendizados.txt        # Anotações pessoais de aprendizados durante o projeto (Ignorado pelo Git)
 │
 ├── data/                       # Camada de Armazenamento Local (Ignorada no Git)
-│   └── raw/                    # Arquivos CSV brutos extraídos do yfinance
+│   └── raw/                    # Arquivos Parquet brutos extraídos do yfinance
+│       └── YEAR/
+│           └── MONTH/
+│               └── DAY/
+│                   └── b3_extract_hhmmss.parquet
 │
 ├── sql/                        # Scripts de modelagem de dados
 │   └── gold_queries.sql        # Queries de criação e materialização da Camada Gold
 │
 ├── src/                        # Scripts modulares em Python (Código Fonte)
 │   ├── extraction/
-│   │   ├── README.md
+│   │   ├── README.md           # Documentação específica e técnica do processo de ingestão
 │   │   └── extract.py          # Script de ingestão da API para a pasta Raw
 │   ├── transformation/
 │   │   ├── README.md
@@ -72,7 +82,7 @@ b3-market-data-pipeline/
 │
 ├── main.py                     # Script orquestrador principal do pipeline
 ├── requirements.txt            # Dependências do projeto
-├── README.md                   # Documentação
+├── README.md                   # Documentação Geral
 └── .gitignore                  # Filtro de arquivos para o Git
 ```
 

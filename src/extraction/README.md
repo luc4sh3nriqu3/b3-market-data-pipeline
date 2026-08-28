@@ -1,43 +1,48 @@
-Abaixo estão detalhados os fundamentos técnicos e os trade-offs de engenharia ponderados para a concepção desta versão (v1) da camada de ingestão, servindo como registro de governança e tomadas de decisão do projeto.
-
 # 📂 Estratégia de Ingestão: Camada Raw (Bronze)
 
-A camada *Raw* foi projetada sob o princípio da **imutabilidade** e da **preservação histórica total**. O objetivo é armazenar os dados exatamente como foram extraídos da fonte, permitindo reprocessamentos futuros sem perdas.
+Este subdiretório contém o componente inicial do pipeline, responsável por realizar a coleta de dados brutos do mercado financeiro e persisti-los de forma estruturada no nosso Data Lake local.
 
-## 🔄 Método de Captura em Lote (Bulk Download)
+## 🛠️ O Script `extract.py`
+O script `extract.py` foi projetado para ser um processo leve, resiliente e altamente modular. Ele consome dados da API pública do Yahoo Finance e prepara a camada de entrada do nosso sistema.
 
-O pipeline utiliza o método `yf.download()`, ideal para a extração simultânea de uma lista de ativos (`tickers`) em uma única requisição de rede.
-- **Dinâmica do Mercado:** O parâmetro `end=today` garante o comportamento ideal do fluxo. Se o pregão estiver aberto, capturamos a volatilidade do dia em tempo real; se o mercado estiver fechado, a API do Yahoo Finance consolida automaticamente o preço de fechamento definitivo do pregão atual ou do último dia útil anterior.
+## 🏗️ Decisões Técnicas e Arquitetura da Ingestão
+Durante o desenvolvimento deste módulo, tomamos decisões estratégicas de engenharia para garantir a estabilidade do pipeline em ambiente de produção:
 
-## 📅 Abordagem por Snapshot Histórico Completo
+**1. Método de Captura em Lote (Bulk Download)**<br>
+Utilizamos o método yf.download() da biblioteca yfinance, ideal para realizar a extração simultânea de uma lista de ativos (tickers) em uma única requisição de rede.
 
-A cada execução, o pipeline extrai a série histórica completa de todas as ações a partir de uma data de corte fixa (**01/01/2020**), gravando o resultado em partições físicas diárias (`data/raw/ANO/MES/DIA/`).
+- Dinâmica de Execução: O pipeline é executado em lote diário (Daily Batch EOD - End of Day), programado para rodar após o fechamento do pregão da B3. Se o mercado estiver aberto, capturamos a última cotação em tempo real; se estiver fechado, a API retorna automaticamente o preço de fechamento definitivo do dia útil atual (ou do último anterior).
 
-Essa abordagem de *Snapshot* (redundância estratégica) foi escolhida em vez de uma carga incremental diária devido a três fatores críticos de resiliência:
+**2. Estratégia de Janela Deslizante (Sliding Window) de 30 Dias**<br>
+Em vez de baixar todo o histórico de dados a cada execução diária, o pipeline adota uma **Janela Deslizante de 30 dias** (`initial_date` calculada dinamicamente ou parametrizada para cobrir o último mês).
 
-1. **Idempotência e Tolerância a Falhas:** Se o pipeline falhar ou for interrompido no meio da execução, o estado anterior do Data Lake permanece intacto. Como não há sobrescritas diretas, o processo é 100% idempotente (pode ser executado novamente sem corromper dados passados).
+Esta abordagem substitui a carga histórica total diária para mitigar três problemas clássicos de produção:
 
-2. **Custo Computacional de I/O (Input/Output):** Fazer a leitura de uma série histórica de 5 anos para concatenar o dia de hoje na memória e reescrever o arquivo consolidado tornaria o pipeline excessivamente lento e caro à medida que o volume de dados crescesse.
+- **Prevenção de Rate Limits:** Evita requisições abusivas e volumosas à API gratuita do Yahoo Finance, eliminando o risco de termos nosso endereço IP bloqueado por comportamento anômalo.
 
-3. **Proteção contra Eventos Corporativos Retroativos:** Ativos financeiros sofrem ajustes constantes devido a dividendos, desdobramentos (*splits*) e agrupamentos (*inplits*). Ao salvar o snapshot completo do histórico diariamente, preservamos o rastro exato de como o mercado enxergava o passado naquele momento do tempo, garantindo a **linhagem de dados (Data Lineage)** para auditoria.
+- **Otimização de Custo de Rede e I/O:** Transferir e processar apenas 30 dias de dados é infinitamente mais rápido, consumindo menos banda de rede e memória do servidor do que manipular anos de histórico diariamente.
 
-## 🛠️ Normalização do Esquema (Achatamento de MultiIndex Colunar)
-Por padrão, ao baixar múltiplos ativos simultaneamente, o `yfinance` retorna um DataFrame com duas camadas de colunas (*MultiIndex*), organizadas hierarquicamente por `(Métrica, Ticker)`.
+- **Resiliência a Ajustes Retroativos (Corporate Actions):** No mercado financeiro, preços históricos sofrem ajustes retroativos devido a distribuições de dividendos, desdobramentos (*splits*) ou agrupamentos (*inplits*). A janela de 30 dias garante que qualquer ajuste recente feito pela B3 seja capturado e atualizado no nosso banco de dados via operações de *Upsert* nas camadas seguintes, blindando nosso banco contra dados dessincronizados.
 
-- **O Problema:** Estruturas de índices multiníveis violam a compatibilidade nativa de formatos de armazenamento modernos (como o Parquet) e dificultam a leitura por motores de processamento distribuído (como o Apache Spark).
+**3. Normalização do Esquema (Achatamento de MultiIndex Colunar)**<br>
+Ao baixar múltiplos ativos simultaneamente, o `yfinance` retorna um DataFrame estruturado em um índice de colunas multinível (*MultiIndex*), organizado hierarquicamente por (`Métrica, Ticker`).
 
-- **A Solução:** Aplicamos uma etapa de engenharia de recursos para "achatar" o esquema. Primeiro, transformamos o índice de datas em uma coluna comum (`Date`). Em seguida, combinamos as camadas colunares em strings únicas padronizadas no formato `Metrica_Ticker` (ex: `Close_ABEV3.SA`, `Open_BBDC4.SA`). Isso resulta em uma **Wide Table (Tabela Larga)** limpa, otimizada e tipada.
+**O Problema:** Estruturas de índices multiníveis violam a compatibilidade nativa de formatos modernos de armazenamento colunar (como o Parquet) e criam gargalos em motores de processamento distribuído (como o Apache Spark).
 
-## ⏱️ Mecanismo de Auditoria e Particionamento Cross-Platform
-- **Segurança de Escrita:** Para suportar múltiplas execuções intradiárias (micro-lotes) sem riscos de colisão de arquivos, o nome do arquivo gerado recebe a hora exata da extração limpa de caracteres especiais (ex: `b3_extract_153000.parquet`). Se uma carga específica falhar, o engenheiro consegue isolar e reprocessar aquele arquivo sem afetar as extrações anteriores do mesmo dia.
+**A Solução:** Aplicamos uma etapa de engenharia de dados para "achatar" o esquema. Primeiro, transformamos o índice de datas em uma coluna comum (`Date`). Em seguida, combinamos as duas camadas colunares em strings únicas padronizadas no formato `Metrica_Ticker` (ex: `Close_ABEV3.SA`, `Open_BBDC4.SA`). O resultado é uma **Wide Table (Tabela Larga)** limpa e otimizada para persistência rápida.
 
-- **Injeção de Metadados:** Injetamos a coluna interna `extracted_at` com o timestamp em formato UTC diretamente no corpo do dado. Isso garante que a informação do momento da coleta não dependa do nome do arquivo, permitindo que as camadas futuras (Silver/Gold) apliquem regras de deduplicação eficientes.
+**4. Mecanismo de Auditoria e Particionamento Físico**<br>
+- **Idempotência no Armazenamento:** Para suportar múltiplas execuções no mesmo dia (como em casos de reprocessamento por falhas temporárias) sem riscos de colisão ou corrupção de dados, criamos uma árvore de diretórios física particionada por data (`data/raw/ANO/MES/DIA/`).
 
-- **Infraestrutura Portável:** Toda a resolução de caminhos de diretórios e criação física de pastas foi desenvolvida utilizando a biblioteca `pathlib.Path`. Isso assegura que o pipeline funcione de forma agnóstica em qualquer sistema operacional (Windows, Linux ou macOS) ou contêiner Docker.
+- **timestamp no Nome do Arquivo:** O arquivo `.parquet` gerado recebe a marcação temporal exata da execução limpa de caracteres especiais (ex: `b3_extract_193000.parquet`). Se uma execução falhar, conseguimos reprocessá-la sem afetar ou sobrescrever os arquivos consolidados anteriormente no mesmo dia.
 
-## 🚀 Otimização do Armazenamento (Formato Parquet)
-Embora o tratamento inicial dos dados utilize estruturas comuns do ecossistema Python, a persistência final na camada Raw foi implementada utilizando o formato de arquivo **Apache Parquet** (`to_parquet`) em substituição ao tradicional CSV. Esta decisão técnica baseia-se em três pilares analíticos:
+- **Injeção de Metadados (Lineage):** Injetamos a coluna interna `extracted_at` (com timestamp UTC) diretamente dentro da estrutura do dado. Isso garante que a rastreabilidade do momento exato da extração acompanhe o dado de forma independente, permitindo que a camada Silver aplique regras de deduplicação sem depender do nome do arquivo físico.
 
-- **Compressão e Performance:** O Parquet é um formato colunar binário. Ele reduz drasticamente o espaço em disco através de dicionários de compressão nativos e acelera as consultas de leitura (I/O).
+- **Design Cross-Platform:** Toda a navegação de diretórios e criação física de pastas utiliza a biblioteca `pathlib.Path`. Isso garante que o pipeline funcione de forma transparente e agnóstica em qualquer sistema operacional (Windows, Linux, macOS) ou dentro de contêineres Docker.
 
-- **Preservação de Tipagem Forte:** Diferente do CSV (que armazena tudo como texto bruto e exige inferência de tipos na leitura), o Parquet armazena nativamente os metadados dos tipos de dados. Isso garante que colunas de preço permaneçam estritamente como numéricas (`float`) e datas permaneçam como timestamps (`datetime`), evitando corrupção de tipos em processos subsequentes (*downstream*).
+## 🚀 Otimização do Armazenamento (Formato Apache Parquet)
+A escrita dos arquivos brutos na camada Raw é feita utilizando o formato **Apache Parquet** (`to_parquet`) em substituição ao tradicional CSV. Esta decisão técnica baseia-se em:
+
+1. **Compressão Colunar Eficiente:** Reduz drasticamente o espaço de armazenamento local através de dicionários de compressão nativos.
+
+2. **Preservação de Tipagem Forte:** O Parquet armazena nativamente os metadados dos tipos de dados. Isso evita que colunas numéricas de preços ou colunas de data sofram inferências errôneas ou se percam como texto bruto na hora de carregar os arquivos nas próximas etapas do pipeline.
