@@ -46,3 +46,12 @@ A escrita dos arquivos brutos na camada Raw é feita utilizando o formato **Apac
 1. **Compressão Colunar Eficiente:** Reduz drasticamente o espaço de armazenamento local através de dicionários de compressão nativos.
 
 2. **Preservação de Tipagem Forte:** O Parquet armazena nativamente os metadados dos tipos de dados. Isso evita que colunas numéricas de preços ou colunas de data sofram inferências errôneas ou se percam como texto bruto na hora de carregar os arquivos nas próximas etapas do pipeline.
+
+## 🧪 Garantia de Qualidade: Testes Unitários
+Para assegurar a resiliência e a manutenibilidade do pipeline de ingestão, implementamos uma suíte de testes unitários utilizando o framework **pytest**. A estratégia foca em isolar completamente a lógica de negócios das dependências externas (Rede e Disco):
+
+- **Mocking da API Externa** (`@patch`): Interceptamos as requisições ao `yfinance` e injetamos DataFrames fictícios (Fixtures). Isso garante que nossos testes rodem instantaneamente em qualquer ambiente (como esteiras de CI/CD), eliminando o risco de falhas por indisponibilidade da API, rate limits ou pregões fechados.
+
+- **Validação de Transformação:** Os testes certificam que a função de extração recebe com sucesso o esquema sujo (MultiIndex) e o devolve perfeitamente achatado, validando também a criação da coluna de auditoria `extracted_at`.
+
+- **Isolamento do Sistema de Arquivos:** Subduímos as funções de escrita (como o `to_parquet` e `Path.mkdir`) usando dublês de testes. Isso nos permite auditar se o algoritmo de particionamento físico (cálculo de diretórios baseados em data e hora) funciona corretamente, sem gerar arquivos de lixo no armazenamento local da máquina de desenvolvimento.
